@@ -1,0 +1,199 @@
+---
+title: "Cyclistic Member Type Activity Anlysis"
+author: "R Y"
+date: '2022-06-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cyclistic Member Type Activity Analysis  
+  
+### Goal
+  
+Understand how casual riders and annual members use Cyclistic bikes.   
+  
+* Similarities and differences  
+  
+Using these insights, design a new marketing strategy to convert casual riders into annual members.   
+
+### Analysis Results (June 2021 - May 2022)
+
+```{r Anaylses, echo=FALSE, message=FALSE}
+library("zoo")
+library("lubridate")
+library(tidyverse)
+library(ggplot2)
+library("skimr")
+library("janitor")
+library(pivottabler)
+library("knitr")
+library("kableExtra")
+
+# knitr to display dataframes. zoo for as.yearmon
+
+# Load the data in with Original Data set to working directory
+setwd("C:/Users/reimi/OneDrive/Google Certificate - R/CaseStudy - Cyclistic/Original Data")
+trip202205_df <- read_csv("202205-divvy-tripdata.csv")
+trip202204_df <- read_csv("202204-divvy-tripdata.csv")
+trip202203_df <- read_csv("202203-divvy-tripdata.csv")
+trip202202_df <- read_csv("202202-divvy-tripdata.csv")
+trip202201_df <- read_csv("202201-divvy-tripdata.csv")
+trip202112_df <- read_csv("202112-divvy-tripdata.csv")
+trip202111_df <- read_csv("202111-divvy-tripdata.csv")
+trip202110_df <- read_csv("202110-divvy-tripdata.csv")
+trip202109_df <- read_csv("202109-divvy-tripdata.csv")
+trip202108_df <- read_csv("202108-divvy-tripdata.csv")
+trip202107_df <- read_csv("202107-divvy-tripdata.csv")
+trip202106_df <- read_csv("202106-divvy-tripdata.csv")
+
+# Change the directory back to where the analysis should be save
+setwd("C:/Users/reimi/OneDrive/Google Certificate - R/CaseStudy - Cyclistic")
+
+# stitching all of the dataframes into one
+cyclistic_alldata <- rbind(trip202205_df, 
+                           trip202204_df,
+                           trip202203_df,
+                           trip202202_df,
+                           trip202201_df,
+                           trip202112_df,
+                           trip202111_df,
+                           trip202110_df,
+                           trip202109_df,
+                           trip202108_df,
+                           trip202107_df,
+                           trip202106_df)
+
+
+# just grab ride_id, rideable_type, started_at, ended_at, and member_casual
+# cyclistic_yr_cond <- cyclistic_alldata %>% 
+#   select(ride_id, rideable_type, started_date, started_time, ended_date, ended_time, member_casual)
+cyclistic_yr_cond <- cyclistic_alldata %>% 
+  select(ride_id, rideable_type, started_at, ended_at, member_casual)
+
+# clean column names 
+cyclistic_yr_cond <- clean_names(cyclistic_yr_cond)
+
+# remove some of the variables
+rm(cyclistic_alldata, trip202106_df, trip202107_df, trip202108_df, trip202109_df, trip202110_df, trip202205_df)
+
+# create ride_length and day_of_week columns
+cyclistic_yr_cond$ride_length <- cyclistic_yr_cond$ended_at - cyclistic_yr_cond$started_at
+cyclistic_yr_cond$day_of_week <- wday(as.Date(cyclistic_yr_cond$started_at))
+
+# Create day of week key
+days_of_week <- c(1:7)
+day_of_week <- c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
+days_key <- data.frame(days_of_week, day_of_week)
+
+kbl(days_key, caption = "Days of the Week Key", align = "c") %>% 
+  kable_minimal()
+
+
+# calculate mean/max ride_length and mode of day of week
+
+    # borrow mode function from https://www.statology.org/mode-in-r/
+find_mode <- function(x) {
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
+}
+
+    # by member type
+ride_summary_member <- 
+  cyclistic_yr_cond %>%
+  group_by(member_casual) %>%
+  summarise(average_ride_length=mean(ride_length),
+            max_ride_length=max(ride_length),
+            find_mode(day_of_week)
+            )
+
+kbl(ride_summary_member, caption = "Mean/Max of ride length & Popular day of week to ride", align = "c") %>% 
+  kable_minimal()
+
+    # making a year-month column
+start_dates <- as.POSIXct(cyclistic_yr_cond$started_at, format="%Y/%m/%d")
+cyclistic_yr_cond$year_month <- as.yearmon(start_dates)
+  #floor_date(start_dates, "month")
+
+    # by month
+ride_summary_month <- 
+  cyclistic_yr_cond %>%
+  group_by(year_month, member_casual) %>%
+  summarise(average_ride_length=mean(ride_length),
+            max_ride_length=max(ride_length),
+            day_of_week_mode=find_mode(day_of_week))
+
+kable(ride_summary_month, caption = "Mean/Max of ride length & Popular day of week to ride by month", align = "c") %>% 
+  kable_minimal()
+
+# graph average ride_length per day of the week for member_casual
+ride_summary_member_2 <- 
+  cyclistic_yr_cond %>%
+  group_by(member_casual, day_of_week) %>%
+  summarise(average_ride_length=mean(ride_length)/60
+  )
+
+kable(ride_summary_member_2, caption = "Average Ride Duration in Min", align = "c") %>% 
+  kable_minimal()
+
+# graph day_of_week total counts per member type
+ride_summary_rides <- 
+  cyclistic_yr_cond %>%
+  group_by(member_casual, day_of_week) %>%
+  summarise(count_rides=n())
+
+kable(ride_summary_rides, caption = "Total Rides per day of the week by membership type", align = "c") %>% 
+  kable_minimal()
+
+```
+
+## Plots of Data Analyzed
+  
+Graph of average ride length per day of the week for the two member types:  
+  
+```{r Plots, echo=FALSE, message=FALSE}
+ggplot(ride_summary_member_2, aes(x = day_of_week, y = average_ride_length)) +
+  geom_col() +
+  facet_wrap(~member_casual) +
+  labs(title="Average Ride Length per Day of the Week by Member Type",
+       subtitle="Day 1=Sunday, 2=Monday, 3=Tuesday, 4=Wednesday, 5=Thursday, 6=Friday, 7=Saturday",
+       x="Day of The Week",
+       y="Avg Ride Length (min)")
+```
+  
+  
+Graph of the total rides per member type throughout the week:    
+  
+  
+```{r plot2, echo=FALSE, message=FALSE}
+ggplot(ride_summary_rides, aes(x = day_of_week, y = count_rides)) +
+  geom_col() +
+  facet_wrap(~member_casual) +
+  labs(title="Total rides per Day of the Week by Member Type",
+       subtitle="Day 1=Sunday, 2=Monday, 3=Tuesday, 4=Wednesday, 5=Thursday, 6=Friday, 7=Saturday",
+       x="Day of The Week",
+       y="Total Rides")
+```
+  
+  
+Graph of popular ride days per month:  
+  
+```{r popular rides, echo=FALSE, message=FALSE}
+ggplot(ride_summary_month, aes(x = year_month, y = day_of_week_mode, color = member_casual)) +
+  geom_point() +
+  labs(title="Popular Day of the Week in the Last 12 Months",
+       subtitle="Day 1=Sunday, 2=Monday, 3=Tuesday, 4=Wednesday, 5=Thursday, 6=Friday, 7=Saturday",
+       x="Year/Month",
+       y="Day of The Week")
+```
+  
+  
+## Observations/Recommendations for Stakeholders
+  
+  * Casual riders appear to ride for 2x longer than members ride, though some instances point to a bicycle forgotten to be returned.  
+  * Members appear to rent bicycles at a consistent rate through out the week compared to casual riders who rent more often on weekends.  
+  * Throughout the year, members consistently ride most often on weekdays compared to casual riders that ride on weekends.  
+  * More information on whether members are using the bicycles to commute to work or school will be beneficial for future analyses.
